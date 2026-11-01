@@ -52,12 +52,17 @@ def find_secrets(repo_path, all_commits=False):
             # Scan all commits in the history
             try:
                 result = subprocess.run(['git', 'log', '--all', '--pretty=format:%H', '--name-only', '--diff-filter=ACDMRTUXB'], capture_output=True, text=True, cwd=repo_path, check=True)
+                # The log output mixes commit hashes and file names in one stream, and the loop below
+                # treats every non empty line as a hash. The file name lines fail as show targets
+                # and fill the log with errors that are really my parsing.
                 commit_history = result.stdout.split('\n')
 
                 for commit_hash in commit_history:
                     if commit_hash:  # Make sure we have a valid hash
                         commit_hash = commit_hash.strip()
                         try:
+                            # git show prints the whole diff of the commit, so a secret in a long lived file is
+                            # reported again at every commit that touched that file, not once.
                             file_content_result = subprocess.run(['git', 'show', f'{commit_hash}'], capture_output=True, text=True, cwd=repo_path, check=True)
                             file_content = file_content_result.stdout
                             if not file_content:
@@ -65,6 +70,8 @@ def find_secrets(repo_path, all_commits=False):
                             for name, pattern in patterns.items():
                                 matches = re.findall(pattern, file_content, re.MULTILINE | re.IGNORECASE)
                                 if matches:
+                                    # I log the matches themselves. For the password pattern that prints the
+                                    # secret I just found straight into the log, the one place it should never land.
                                     logging.warning(f"Potential {name} found in commit {commit_hash}: {matches}")
 
                         except subprocess.CalledProcessError as e:
@@ -76,6 +83,8 @@ def find_secrets(repo_path, all_commits=False):
 
         else:
             # Scan the current state of the repository
+            # This walk does not skip .git. Packed objects and index files get read as text, the
+            # binary ones log errors, and strings inside git's own storage can flag as findings.
             for root, _, files in os.walk(repo_path):
                 for file in files:
                     file_path = os.path.join(root, file)
@@ -142,6 +151,9 @@ def check_cve(software_version):
                             version_match = True
                             break
 
+                        # An excluding bound tested with less or equal flags the first fixed version as
+                        # vulnerable. I also never test any start bound, so versions older than the whole
+                        # vulnerable range match, and the match's own vulnerable flag is never read.
                         if software_name in cpe_uri and cpe.get("versionEndExcluding", None) and version.parse(version_str) <= version.parse(cpe.get("versionEndExcluding")):
                             version_match = True
                             break
@@ -186,6 +198,8 @@ def simple_web_scan(url):
 
         # Basic XSS check (parameter injection)
         xss_payload = "<script>alert('XSS')</script>"
+        # A fresh question mark is appended even when the URL already carries a query string, so
+        # the payload lands inside the last existing value and the check tests nothing.
         test_url = f"{url}?xss={xss_payload}"  #append the xss payload as a URL parameter
         try:
             response = requests.get(test_url, timeout=5) # set a timeout
