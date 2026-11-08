@@ -42,8 +42,8 @@ def _mask_value(value):
 # of the password pattern. A bare long alphanumeric run is not enough.
 SECRET_PATTERNS = {
     "API Key": r"(?i)(?:api[_-]?key|apikey|access[_-]?key|secret[_-]?key|auth[_-]?token|access[_-]?token|client[_-]?secret)\s*[:=]\s*[\"']?([A-Za-z0-9_\-]{16,64})[\"']?",
-    "Password": r"(password|pwd|pass):[\s]*[\"']?[\w\d!@#$%^&*()_+=-]+[\"']?",
-    "Private Key": r"-----BEGIN RSA PRIVATE KEY-----",
+    "Password": r"(?i)(?:password|pwd|pass)\s*[:=]\s*[\"']?([A-Za-z0-9!@#$%^&*()_+=\-]{4,})[\"']?",
+    "Private Key": r"(-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)",
 }
 
 
